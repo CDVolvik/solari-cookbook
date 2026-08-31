@@ -1,0 +1,22 @@
+{
+  "name": "solari-lead-path-auditor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Audits whether a website's lead form actually delivers a lead, using Solari cloud browsers.",
+  "scripts": {
+    "audit": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solarisdk/browser": "^0.1.1",
+    "@solarisdk/sdk": "^0.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
