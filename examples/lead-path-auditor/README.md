@@ -64,11 +64,11 @@ Three reasons, and I would not have needed the third before I got burned by it.
 ## Quick start
 
 ```bash
+cd examples/lead-path-auditor
 npm install
-cp .env.example .env          # then paste your key
 export SOLARI_API_KEY=slr_live_...   # https://console.getsolari.com
 
-npm run demo                  # end-to-end, including a deliberately broken form
+npm start                     # end-to-end, including a deliberately broken form
 npm run audit                 # dry run against sites.example.json
 npm test                      # 26 unit tests, no key needed
 ```
@@ -174,11 +174,9 @@ covered by them.
 
 ## Built with AI assistance
 
-I wrote this with Claude Code, which is the way I work day to day and the way
-the challenge asked for. The design calls are mine and I will defend any of
-them: the double opt-in on submission, asserting delivery separately from
-confirmation, and the dwell default all come from production failures I had to
-diagnose myself.
+I wrote this with Claude Code, which is how I work day to day. The design calls
+are mine and I will defend any of them: the double opt-in on submission,
+asserting delivery separately from confirmation, and the dwell default all come
+from production failures I had to diagnose myself.
 
-Built for the [Solari](https://getsolari.com) / Pinetree Research challenge.
-MIT.
+MIT, same as the rest of this repo.
