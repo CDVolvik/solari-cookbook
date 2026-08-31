@@ -6,6 +6,7 @@
   "description": "Audits whether a website's lead form actually delivers a lead, using Solari cloud browsers.",
   "scripts": {
     "audit": "tsx src/cli.ts",
+    "demo": "tsx src/cli.ts --demo",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

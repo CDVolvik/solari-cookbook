@@ -12,9 +12,10 @@ const { values } = parseArgs({
     sites: { type: 'string', default: 'sites.example.json' },
     demo: { type: 'boolean', default: false },
     submit: { type: 'boolean', default: false },
+    stealth: { type: 'boolean', default: false },
     dwell: { type: 'string', default: '3000' },
     timeout: { type: 'string', default: '30000' },
-    concurrency: { type: 'string', default: '3' },
+    concurrency: { type: 'string', default: '1' },
     out: { type: 'string', default: 'reports' },
     help: { type: 'boolean', default: false },
   },
@@ -30,9 +31,12 @@ lead-path-auditor — does this form actually deliver a lead?
                        drops the lead, and submit to them
   --sites <file>       site registry (default: sites.example.json)
   --submit             also submit to registry sites that set "submit": true
+  --stealth            stealth fingerprinting for sites that filter datacenter
+                       traffic (paid Solari feature; free keys get HTTP 402)
   --dwell <ms>         time on the filled form before submitting (default: 3000)
   --timeout <ms>       per-page navigation timeout (default: 30000)
-  --concurrency <n>    sites audited in parallel (default: 3)
+  --concurrency <n>    sites audited in parallel (default: 1, because every
+                       browser and the demo sandbox each hold a session slot)
   --out <dir>          report directory (default: reports)
 
 Registry sites are never submitted to unless you pass --submit AND the site
@@ -61,11 +65,14 @@ let fixture: Fixture | undefined
 if (values.demo) {
   console.log('starting sandbox fixture…')
   fixture = await startFixture(apiKey)
-  console.log(`fixture at ${fixture.baseUrl}`)
+  console.log(`fixture at ${fixture.urlFor('/good')}`)
   tasks.unshift(
-    { site: { name: 'demo-good', url: `${fixture.baseUrl}/good`, submit: true }, submit: true },
     {
-      site: { name: 'demo-silent', url: `${fixture.baseUrl}/silent`, submit: true },
+      site: { name: 'demo-good', url: fixture.urlFor('/good'), submit: true },
+      submit: true,
+    },
+    {
+      site: { name: 'demo-silent', url: fixture.urlFor('/silent'), submit: true },
       submit: true,
     },
   )
@@ -89,6 +96,7 @@ try {
       for (let task = queue.shift(); task; task = queue.shift()) {
         const result = await auditSite(solari, task.site, {
           submit: task.submit,
+          stealth: Boolean(values.stealth),
           dwellMs: Number(values.dwell),
           pageTimeoutMs: Number(values.timeout),
           deliveredCheck: fixture ? fixture.seen : undefined,

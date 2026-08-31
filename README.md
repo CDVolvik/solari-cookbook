@@ -50,7 +50,9 @@ Three reasons, and I would not have needed the third before I got burned by it.
 1. **Stealth and residential egress.** A submission from a datacenter IP gets
    blocked or silently spam-filtered by the exact defensive layer you are trying
    to measure through. To find out what a visitor experiences you have to look
-   like one. `stealth: true` plus `proxy: "us"` is one launch option each.
+   like one. `stealth: true` plus `proxy: "us"` is one launch option each. Both
+   are paid features — a free key gets HTTP 402 at session create — so this is
+   off by default and enabled with `--stealth`.
 2. **Session recording.** When a client's form is broken, "trust me" is not a
    deliverable. The rrweb replay is DOM-level, so it stays small and greppable,
    and it shows exactly where the submission died.
@@ -66,10 +68,15 @@ npm install
 cp .env.example .env          # then paste your key
 export SOLARI_API_KEY=slr_live_...   # https://console.getsolari.com
 
-npm run audit -- --demo       # end-to-end, including a deliberately broken form
+npm run demo                  # end-to-end, including a deliberately broken form
 npm run audit                 # dry run against sites.example.json
 npm test                      # 26 unit tests, no key needed
 ```
+
+Runs one browser at a time by default. Every browser and the demo sandbox each
+hold a session slot, and free plans have few of them; `--concurrency` raises it
+if your plan allows. A run that hits the cap waits for a slot rather than
+failing the site.
 
 ### The demo
 
@@ -79,13 +86,30 @@ visitor: same fields, same Spanish labels, same hidden honeypot, same
 
 One of them records the lead. The other throws it away.
 
+Real output from `npm run demo`, with the two sites in `sites.example.json`
+audited in dry run behind them:
+
 ```
-delivered       demo-good    — HTTP 200 · page confirmed · token arrived
-silent-failure  demo-silent  — HTTP 200 · page confirmed · token never arrived
+starting sandbox fixture…
+LIVE — will submit to: demo-good, demo-silent
+delivered       demo-good — HTTP 200 · page confirmed · token arrived
+silent-failure  demo-silent — HTTP 200 · page confirmed · token never arrived
+filled          r21digital — dry run — 5 field(s) fillable, submit not clicked
+filled          r21labs — dry run — 4 field(s) fillable, submit not clicked
+
+4 audited · 1 broken · 1 silent
 ```
 
-Both return 200. Both show a confirmation. A status-code check cannot tell them
-apart, and neither can a human clicking through it once.
+Both demo forms return 200. Both show a confirmation. A status-code check
+cannot tell them apart, and neither can a human clicking through once.
+
+The two real rows are the classifier working on production forms it has never
+seen: it found `name, email, phone, company, message` on one and
+`name, email, company, message` on the other, plus a hidden honeypot on each
+that it left empty. Each run also pulled its rrweb replay — 25 to 43 events per
+session.
+
+Exit code is 1 when anything is broken, so this drops into CI unchanged.
 
 ## Not submitting to other people's forms by accident
 
@@ -123,9 +147,11 @@ that submits instantly measures a form that never ran.
 
 ## Known limits
 
-- Form discovery picks the element with the most inputs. A page with a newsletter
-  signup above the contact form can pick the wrong one; pass `formSelector` in
-  the registry to override.
+- Form discovery picks the element with the most inputs, which is a heuristic and
+  behaves like one. Pointing the registry at a homepage that carries a newsletter
+  box instead of the contact form gets you a one-field audit of the newsletter —
+  that happened while building this, and the fix was to point at `/contact`
+  rather than to make the heuristic cleverer. `formSelector` overrides it.
 - Fields are filled with `fill()`, not keystroke by keystroke. A site doing
   behavioral keystroke analysis would see automation.
 - Multi-step and modal forms are not handled.
@@ -133,6 +159,10 @@ that submits instantly measures a form that never ran.
   one in a sandbox; against real sites you point it at a mailbox you control.
 - Verdicts cap at `confirmed` when no delivery check is configured. That is
   deliberate — it will not claim a lead arrived when it does not know.
+- Stealth and proxy need a paid Solari plan. Without one, sites that filter
+  datacenter traffic will read as `blocked`, which is a true answer to a
+  different question than the one you asked.
+- Concurrency is bounded by your plan's session slots, not by this tool.
 
 ## Tests
 

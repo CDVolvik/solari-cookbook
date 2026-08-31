@@ -16,7 +16,14 @@ import { SolariClient } from '@solarisdk/sdk'
  * so uptime checks and status-code checks both call it healthy.
  */
 export type Fixture = {
-  baseUrl: string
+  /**
+   * Build a URL for a path on the fixture.
+   *
+   * Not string concatenation: `previewUrl` returns an address that already
+   * carries a `?pt_token=` query string, so appending "/good" to it lands the
+   * path after the query and the request 404s.
+   */
+  urlFor(path: string): string
   seen(token: string): Promise<boolean>
   stop(): Promise<void>
 }
@@ -97,21 +104,33 @@ export async function startFixture(apiKey: string): Promise<Fixture> {
 
   const { url } = await sandbox.previewUrl(PORT)
 
-  for (let attempt = 0; attempt < 15; attempt++) {
+  const urlFor = (path: string) => {
+    const u = new URL(url)
+    u.pathname = path
+    return u.toString()
+  }
+
+  let ready = false
+  for (let attempt = 0; attempt < 20 && !ready; attempt++) {
     await new Promise((r) => setTimeout(r, 1000))
     try {
-      const res = await fetch(`${url}/good`)
-      if (res.ok) break
+      ready = (await fetch(urlFor('/good'))).ok
     } catch {
       // preview routing is not up yet
     }
-    if (attempt === 14) throw new Error(`fixture never became reachable at ${url}`)
+  }
+  if (!ready) {
+    await sandbox.kill()
+    throw new Error(`fixture never became reachable at ${urlFor('/good')}`)
   }
 
   return {
-    baseUrl: url,
+    urlFor,
     seen: async (token) => {
-      const res = await fetch(`${url}/seen?token=${encodeURIComponent(token)}`)
+      const u = new URL(url)
+      u.pathname = '/seen'
+      u.searchParams.set('token', token)
+      const res = await fetch(u.toString())
       return (await res.text()).trim() === 'yes'
     },
     stop: () => sandbox.kill(),

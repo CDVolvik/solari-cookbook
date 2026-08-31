@@ -13,6 +13,13 @@ export type AuditOptions = {
   /** When false, the form is located and filled but never submitted. */
   submit: boolean
   /**
+   * Stealth fingerprinting, and the residential proxy that depends on it, are
+   * paid Solari features — a free key gets HTTP 402 at session create. Off by
+   * default so the tool runs on any account; turn it on for sites that filter
+   * datacenter traffic.
+   */
+  stealth: boolean
+  /**
    * Time to sit on the filled form before submitting.
    *
    * Not cosmetic. R21's own lead endpoint rejects anything faster than 2.5s as
@@ -25,55 +32,7 @@ export type AuditOptions = {
   pageTimeoutMs: number
 }
 
-/** Enumerate the most form-like element on the page and tag its fields. */
-const COLLECT = (formSelector: string | null) => {
-  const forms = formSelector
-    ? Array.from(document.querySelectorAll(formSelector))
-    : Array.from(document.querySelectorAll('form'))
-
-  const score = (f: Element) =>
-    f.querySelectorAll('input, textarea, select').length +
-    (f.querySelector('textarea') ? 2 : 0)
-
-  const form = forms.sort((a, b) => score(b) - score(a))[0]
-  if (!form) return { formFound: false, fields: [] as FieldDescriptor[] }
-
-  form.setAttribute('data-slpa-form', '1')
-
-  const fields: FieldDescriptor[] = []
-  const elements = Array.from(
-    form.querySelectorAll('input, textarea, select'),
-  ) as HTMLElement[]
-
-  elements.forEach((el, i) => {
-    el.setAttribute('data-slpa-field', String(i))
-    const rect = el.getBoundingClientRect()
-    const style = getComputedStyle(el)
-    const visible =
-      style.display !== 'none' &&
-      style.visibility !== 'hidden' &&
-      Number(style.opacity) !== 0 &&
-      rect.width > 1 &&
-      rect.height > 1 &&
-      rect.bottom > 0 &&
-      rect.right > 0
-
-    fields.push({
-      selector: `[data-slpa-field="${i}"]`,
-      tag: el.tagName.toLowerCase() as FieldDescriptor['tag'],
-      type: el.getAttribute('type') ?? undefined,
-      name: el.getAttribute('name') ?? undefined,
-      id: el.id || undefined,
-      placeholder: el.getAttribute('placeholder') ?? undefined,
-      ariaLabel: el.getAttribute('aria-label') ?? undefined,
-      autocomplete: el.getAttribute('autocomplete') ?? undefined,
-      required: el.hasAttribute('required'),
-      visible,
-    })
-  })
-
-  return { formFound: true, fields }
-}
+type Collected = { formFound: boolean; fields: FieldDescriptor[] }
 
 export async function auditSite(
   solari: Solari,
@@ -82,7 +41,7 @@ export async function auditSite(
 ): Promise<SiteResult> {
   const started = Date.now()
   const lead = makeSyntheticLead(site.name)
-  const willSubmit = opts.submit && site.submit === true
+  const willSubmit = opts.submit
 
   const base: SiteResult = {
     site: site.name,
@@ -98,11 +57,35 @@ export async function auditSite(
 
   // `proxy` and `captcha` both require stealth — a proxied request from an
   // obviously-automated browser is the pairing that gets blocked.
-  const browser = await solari.launch({
-    stealth: true,
-    ...(site.proxy ? { proxy: site.proxy } : {}),
-    recording: true,
-  })
+  const stealth = opts.stealth || Boolean(site.proxy)
+
+  let browser: Awaited<ReturnType<Solari['launch']>> | undefined
+  let failure: unknown
+
+  for (let attempt = 0; attempt < 6 && !browser; attempt++) {
+    try {
+      browser = await solari.launch({
+        ...(stealth ? { stealth: true } : {}),
+        ...(site.proxy ? { proxy: site.proxy } : {}),
+        recording: true,
+      })
+    } catch (err) {
+      failure = err
+      // 429 is the plan's concurrent-session cap being full right now, which
+      // says nothing about this site. Wait for a slot rather than burning the
+      // row — the fixture sandbox holds one of those slots too.
+      if ((err as { status?: number }).status !== 429) break
+      await new Promise((r) => setTimeout(r, 5000))
+    }
+  }
+
+  if (!browser) {
+    // Returned rather than thrown: one site that cannot start a session must
+    // not take down the rest of the run.
+    base.verdict = 'error'
+    base.detail = launchFailure(failure)
+    return finish(base, started)
+  }
   base.sessionId = browser.id
 
   const submitStatuses: number[] = []
@@ -124,7 +107,63 @@ export async function auditSite(
       return finish(base, started)
     }
 
-    const { formFound, fields } = await page.evaluate(COLLECT, site.formSelector ?? null)
+    // Everything below runs in the browser. It deliberately declares no named
+    // functions: tsx compiles with esbuild's keepNames, which wraps named
+    // bindings in a `__name` helper that does not exist on the page, and
+    // page.evaluate ships this source across as text.
+    // Cast: the query only ever selects input/textarea/select, but the value
+    // crosses the browser boundary as JSON and comes back with `tag: string`.
+    const { formFound, fields } = (await page.evaluate(
+      (formSelector: string | null) => {
+        const forms = Array.from(document.querySelectorAll(formSelector ?? 'form'))
+        forms.sort(
+          (a, b) =>
+            b.querySelectorAll('input, textarea, select').length +
+            (b.querySelector('textarea') ? 2 : 0) -
+            (a.querySelectorAll('input, textarea, select').length +
+              (a.querySelector('textarea') ? 2 : 0)),
+        )
+
+        const form = forms[0]
+        if (!form) return { formFound: false, fields: [] }
+
+        form.setAttribute('data-slpa-form', '1')
+
+        const fields = []
+        const elements = Array.from(form.querySelectorAll('input, textarea, select'))
+
+        for (let i = 0; i < elements.length; i++) {
+          const el = elements[i] as HTMLElement
+          el.setAttribute('data-slpa-field', String(i))
+          const rect = el.getBoundingClientRect()
+          const style = getComputedStyle(el)
+
+          fields.push({
+            selector: '[data-slpa-field="' + i + '"]',
+            tag: el.tagName.toLowerCase(),
+            type: el.getAttribute('type') || undefined,
+            name: el.getAttribute('name') || undefined,
+            id: el.id || undefined,
+            placeholder: el.getAttribute('placeholder') || undefined,
+            ariaLabel: el.getAttribute('aria-label') || undefined,
+            autocomplete: el.getAttribute('autocomplete') || undefined,
+            required: el.hasAttribute('required'),
+            visible:
+              style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              Number(style.opacity) !== 0 &&
+              rect.width > 1 &&
+              rect.height > 1 &&
+              rect.bottom > 0 &&
+              rect.right > 0,
+          })
+        }
+
+        return { formFound: true, fields }
+      },
+      site.formSelector ?? null,
+    )) as Collected
+
     if (!formFound) {
       base.verdict = 'no-form'
       base.detail = 'no form element on the page'
@@ -192,10 +231,20 @@ export async function auditSite(
     base.detail = errText(err)
     return finish(base, started)
   } finally {
+    // rrweb batches events and flushes on a timer. Closing immediately ships a
+    // near-empty replay, which looks like a recording and is not one.
+    await new Promise((r) => setTimeout(r, 2000))
     await browser.close()
     const events = await replayEvents(solari, browser.id)
     if (events !== null) base.replayEvents = events
   }
+}
+
+function launchFailure(err: unknown): string {
+  const status = (err as { status?: number }).status
+  if (status === 402) return 'session refused (402) — stealth and proxy need a paid Solari plan'
+  if (status === 429) return 'no free session slot (429) — lower --concurrency or raise the plan cap'
+  return `could not start a session: ${errText(err)}`
 }
 
 function describe(
@@ -216,13 +265,18 @@ function describe(
  * shows up — a missing replay is not an audit failure.
  */
 async function replayEvents(solari: Solari, sessionId: string): Promise<number | null> {
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 10; attempt++) {
     await new Promise((r) => setTimeout(r, 3000))
     try {
       const blob = await solari.sessions.downloadReplay(sessionId)
+      // Decode, don't stringify: this is a Uint8Array, and its toString() is a
+      // comma-separated list of byte values, which counts as exactly one line
+      // no matter how long the recording is.
+      //
       // Stored gzipped, but the HTTP client honours Content-Encoding and hands
       // back plain NDJSON. Do not decompress.
-      return blob.toString().split('\n').filter(Boolean).length
+      const text = new TextDecoder().decode(blob)
+      return text.split('\n').filter(Boolean).length
     } catch (err) {
       if ((err as { status?: number }).status === 404) continue
       return null
