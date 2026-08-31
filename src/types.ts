@@ -15,14 +15,14 @@ export type Site = {
  * one this tool exists to find: the form said thank-you and nothing arrived.
  */
 export type Verdict =
-  | 'no-form'
-  | 'blocked'
-  | 'filled'
-  | 'submitted'
-  | 'confirmed'
-  | 'delivered'
-  | 'silent-failure'
-  | 'error'
+  | "no-form"
+  | "blocked"
+  | "filled"
+  | "submitted"
+  | "confirmed"
+  | "delivered"
+  | "silent-failure"
+  | "error"
 
 export type SiteResult = {
   site: string

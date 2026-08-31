@@ -1,4 +1,4 @@
-import { SolariClient } from '@solarisdk/sdk'
+import { SolariClient } from "@solarisdk/sdk"
 
 /**
  * A demo target, hosted in a Solari sandbox and exposed on a public URL.
@@ -85,21 +85,21 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 HTTPServer(("0.0.0.0", PORTNUM), Handler).serve_forever()
-`.replace('PORTNUM', String(PORT))
+`.replace("PORTNUM", String(PORT))
 
 export async function startFixture(apiKey: string): Promise<Fixture> {
   const client = new SolariClient({ apiKey })
   const sandbox = await client.sandboxes.create({
-    template: 'base',
+    template: "base",
     timeoutMs: 10 * 60_000,
   })
   await sandbox.connect()
-  await sandbox.files.write('/tmp/fixture.py', SERVER_PY)
+  await sandbox.files.write("/tmp/fixture.py", SERVER_PY)
 
   // Background it with a shell — `commands.run` waits for the process to exit,
   // so a foreground server would block until the idle timeout.
-  await sandbox.commands.run('sh', {
-    args: ['-c', 'nohup python3 /tmp/fixture.py >/dev/null 2>&1 &'],
+  await sandbox.commands.run("sh", {
+    args: ["-c", "nohup python3 /tmp/fixture.py >/dev/null 2>&1 &"],
   })
 
   const { url } = await sandbox.previewUrl(PORT)
@@ -114,24 +114,24 @@ export async function startFixture(apiKey: string): Promise<Fixture> {
   for (let attempt = 0; attempt < 20 && !ready; attempt++) {
     await new Promise((r) => setTimeout(r, 1000))
     try {
-      ready = (await fetch(urlFor('/good'))).ok
+      ready = (await fetch(urlFor("/good"))).ok
     } catch {
       // preview routing is not up yet
     }
   }
   if (!ready) {
     await sandbox.kill()
-    throw new Error(`fixture never became reachable at ${urlFor('/good')}`)
+    throw new Error(`fixture never became reachable at ${urlFor("/good")}`)
   }
 
   return {
     urlFor,
     seen: async (token) => {
       const u = new URL(url)
-      u.pathname = '/seen'
-      u.searchParams.set('token', token)
+      u.pathname = "/seen"
+      u.searchParams.set("token", token)
       const res = await fetch(u.toString())
-      return (await res.text()).trim() === 'yes'
+      return (await res.text()).trim() === "yes"
     },
     stop: () => sandbox.kill(),
   }

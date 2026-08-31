@@ -1,4 +1,4 @@
-import { Solari } from '@solarisdk/browser'
+import { Solari } from "@solarisdk/browser"
 import {
   buildFillPlan,
   countHoneypots,
@@ -6,8 +6,8 @@ import {
   didConfirm,
   makeSyntheticLead,
   type FieldDescriptor,
-} from './form.js'
-import type { Site, SiteResult } from './types.js'
+} from "./form.js"
+import type { Site, SiteResult } from "./types.js"
 
 export type AuditOptions = {
   /** When false, the form is located and filled but never submitted. */
@@ -46,8 +46,8 @@ export async function auditSite(
   const base: SiteResult = {
     site: site.name,
     url: site.url,
-    verdict: 'error',
-    detail: '',
+    verdict: "error",
+    detail: "",
     filled: [],
     honeypots: 0,
     dwellMs: 0,
@@ -59,7 +59,7 @@ export async function auditSite(
   // obviously-automated browser is the pairing that gets blocked.
   const stealth = opts.stealth || Boolean(site.proxy)
 
-  let browser: Awaited<ReturnType<Solari['launch']>> | undefined
+  let browser: Awaited<ReturnType<Solari["launch"]>> | undefined
   let failure: unknown
 
   for (let attempt = 0; attempt < 6 && !browser; attempt++) {
@@ -82,7 +82,7 @@ export async function auditSite(
   if (!browser) {
     // Returned rather than thrown: one site that cannot start a session must
     // not take down the rest of the run.
-    base.verdict = 'error'
+    base.verdict = "error"
     base.detail = launchFailure(failure)
     return finish(base, started)
   }
@@ -92,17 +92,20 @@ export async function auditSite(
 
   try {
     const page = await browser.newPage()
-    page.on('response', (res: { status(): number; request(): { method(): string } }) => {
-      if (res.request().method() !== 'GET') submitStatuses.push(res.status())
-    })
+    page.on(
+      "response",
+      (res: { status(): number; request(): { method(): string } }) => {
+        if (res.request().method() !== "GET") submitStatuses.push(res.status())
+      },
+    )
 
     try {
       await page.goto(site.url, {
         timeout: opts.pageTimeoutMs,
-        waitUntil: 'domcontentloaded',
+        waitUntil: "domcontentloaded",
       })
     } catch (err) {
-      base.verdict = 'blocked'
+      base.verdict = "blocked"
       base.detail = `navigation failed: ${errText(err)}`
       return finish(base, started)
     }
@@ -115,42 +118,46 @@ export async function auditSite(
     // crosses the browser boundary as JSON and comes back with `tag: string`.
     const { formFound, fields } = (await page.evaluate(
       (formSelector: string | null) => {
-        const forms = Array.from(document.querySelectorAll(formSelector ?? 'form'))
+        const forms = Array.from(
+          document.querySelectorAll(formSelector ?? "form"),
+        )
         forms.sort(
           (a, b) =>
-            b.querySelectorAll('input, textarea, select').length +
-            (b.querySelector('textarea') ? 2 : 0) -
-            (a.querySelectorAll('input, textarea, select').length +
-              (a.querySelector('textarea') ? 2 : 0)),
+            b.querySelectorAll("input, textarea, select").length +
+            (b.querySelector("textarea") ? 2 : 0) -
+            (a.querySelectorAll("input, textarea, select").length +
+              (a.querySelector("textarea") ? 2 : 0)),
         )
 
         const form = forms[0]
         if (!form) return { formFound: false, fields: [] }
 
-        form.setAttribute('data-slpa-form', '1')
+        form.setAttribute("data-slpa-form", "1")
 
         const fields = []
-        const elements = Array.from(form.querySelectorAll('input, textarea, select'))
+        const elements = Array.from(
+          form.querySelectorAll("input, textarea, select"),
+        )
 
         for (let i = 0; i < elements.length; i++) {
           const el = elements[i] as HTMLElement
-          el.setAttribute('data-slpa-field', String(i))
+          el.setAttribute("data-slpa-field", String(i))
           const rect = el.getBoundingClientRect()
           const style = getComputedStyle(el)
 
           fields.push({
             selector: '[data-slpa-field="' + i + '"]',
             tag: el.tagName.toLowerCase(),
-            type: el.getAttribute('type') || undefined,
-            name: el.getAttribute('name') || undefined,
+            type: el.getAttribute("type") || undefined,
+            name: el.getAttribute("name") || undefined,
             id: el.id || undefined,
-            placeholder: el.getAttribute('placeholder') || undefined,
-            ariaLabel: el.getAttribute('aria-label') || undefined,
-            autocomplete: el.getAttribute('autocomplete') || undefined,
-            required: el.hasAttribute('required'),
+            placeholder: el.getAttribute("placeholder") || undefined,
+            ariaLabel: el.getAttribute("aria-label") || undefined,
+            autocomplete: el.getAttribute("autocomplete") || undefined,
+            required: el.hasAttribute("required"),
             visible:
-              style.display !== 'none' &&
-              style.visibility !== 'hidden' &&
+              style.display !== "none" &&
+              style.visibility !== "hidden" &&
               Number(style.opacity) !== 0 &&
               rect.width > 1 &&
               rect.height > 1 &&
@@ -165,15 +172,15 @@ export async function auditSite(
     )) as Collected
 
     if (!formFound) {
-      base.verdict = 'no-form'
-      base.detail = 'no form element on the page'
+      base.verdict = "no-form"
+      base.detail = "no form element on the page"
       return finish(base, started)
     }
 
     base.honeypots = countHoneypots(fields)
     const plan = buildFillPlan(fields, lead)
     if (plan.length === 0) {
-      base.verdict = 'no-form'
+      base.verdict = "no-form"
       base.detail = `form present but no fillable fields (${fields.length} inspected)`
       return finish(base, started)
     }
@@ -183,10 +190,10 @@ export async function auditSite(
     }
     base.filled = plan.map((s) => s.role)
 
-    const textBefore: string = await page.innerText('body')
+    const textBefore: string = await page.innerText("body")
 
     if (!willSubmit) {
-      base.verdict = 'filled'
+      base.verdict = "filled"
       base.detail = `dry run — ${plan.length} field(s) fillable, submit not clicked`
       return finish(base, started)
     }
@@ -198,8 +205,8 @@ export async function auditSite(
       '[data-slpa-form="1"] button[type="submit"], [data-slpa-form="1"] input[type="submit"], [data-slpa-form="1"] button:not([type])',
     )
     if ((await button.count()) === 0) {
-      base.verdict = 'no-form'
-      base.detail = 'form has no submit control'
+      base.verdict = "no-form"
+      base.detail = "form has no submit control"
       return finish(base, started)
     }
 
@@ -208,7 +215,7 @@ export async function auditSite(
     // the DOM in place. Settle, then read what the visitor would see.
     await page.waitForTimeout(4000)
 
-    const textAfter: string = await page.innerText('body')
+    const textAfter: string = await page.innerText("body")
     const formGone = (await page.locator('[data-slpa-form="1"]').count()) === 0
     const confirmed = didConfirm(textBefore, textAfter, formGone)
 
@@ -227,7 +234,7 @@ export async function auditSite(
     base.detail = describe(base.submitStatus, confirmed, delivered)
     return finish(base, started)
   } catch (err) {
-    base.verdict = 'error'
+    base.verdict = "error"
     base.detail = errText(err)
     return finish(base, started)
   } finally {
@@ -242,8 +249,10 @@ export async function auditSite(
 
 function launchFailure(err: unknown): string {
   const status = (err as { status?: number }).status
-  if (status === 402) return 'session refused (402) — stealth and proxy need a paid Solari plan'
-  if (status === 429) return 'no free session slot (429) — lower --concurrency or raise the plan cap'
+  if (status === 402)
+    return "session refused (402) — stealth and proxy need a paid Solari plan"
+  if (status === 429)
+    return "no free session slot (429) — lower --concurrency or raise the plan cap"
   return `could not start a session: ${errText(err)}`
 }
 
@@ -252,11 +261,11 @@ function describe(
   confirmed: boolean,
   delivered: boolean | null,
 ): string {
-  const parts = [status ? `HTTP ${status}` : 'no submit response observed']
-  parts.push(confirmed ? 'page confirmed' : 'no confirmation shown')
-  if (delivered === true) parts.push('token arrived')
-  if (delivered === false) parts.push('token never arrived')
-  return parts.join(' · ')
+  const parts = [status ? `HTTP ${status}` : "no submit response observed"]
+  parts.push(confirmed ? "page confirmed" : "no confirmation shown")
+  if (delivered === true) parts.push("token arrived")
+  if (delivered === false) parts.push("token never arrived")
+  return parts.join(" · ")
 }
 
 /**
@@ -264,7 +273,10 @@ function describe(
  * poll usually 404s on a perfectly good recording. Returns null if it never
  * shows up — a missing replay is not an audit failure.
  */
-async function replayEvents(solari: Solari, sessionId: string): Promise<number | null> {
+async function replayEvents(
+  solari: Solari,
+  sessionId: string,
+): Promise<number | null> {
   for (let attempt = 0; attempt < 10; attempt++) {
     await new Promise((r) => setTimeout(r, 3000))
     try {
@@ -276,7 +288,7 @@ async function replayEvents(solari: Solari, sessionId: string): Promise<number |
       // Stored gzipped, but the HTTP client honours Content-Encoding and hands
       // back plain NDJSON. Do not decompress.
       const text = new TextDecoder().decode(blob)
-      return text.split('\n').filter(Boolean).length
+      return text.split("\n").filter(Boolean).length
     } catch (err) {
       if ((err as { status?: number }).status === 404) continue
       return null
@@ -291,5 +303,5 @@ function finish(r: SiteResult, started: number): SiteResult {
 }
 
 function errText(err: unknown): string {
-  return err instanceof Error ? err.message.split('\n')[0]! : String(err)
+  return err instanceof Error ? err.message.split("\n")[0]! : String(err)
 }

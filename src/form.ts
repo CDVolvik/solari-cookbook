@@ -10,7 +10,7 @@
 export type FieldDescriptor = {
   /** Selector that addresses this field uniquely. */
   selector: string
-  tag: 'input' | 'textarea' | 'select'
+  tag: "input" | "textarea" | "select"
   type?: string
   name?: string
   id?: string
@@ -23,14 +23,14 @@ export type FieldDescriptor = {
 }
 
 export type FieldRole =
-  | 'name'
-  | 'email'
-  | 'phone'
-  | 'message'
-  | 'company'
-  | 'honeypot'
-  | 'unknown'
-  | 'skip'
+  | "name"
+  | "email"
+  | "phone"
+  | "message"
+  | "company"
+  | "honeypot"
+  | "unknown"
+  | "skip"
 
 /** The synthetic lead. `token` is what we later look for at the sink. */
 export type SyntheticLead = {
@@ -43,13 +43,13 @@ export type SyntheticLead = {
 }
 
 const NON_INPUT_TYPES = new Set([
-  'submit',
-  'button',
-  'image',
-  'reset',
-  'file',
-  'checkbox',
-  'radio',
+  "submit",
+  "button",
+  "image",
+  "reset",
+  "file",
+  "checkbox",
+  "radio",
 ])
 
 /** Names bots are supposed to fall for. Filling one marks you as a bot. */
@@ -57,16 +57,19 @@ const HONEYPOT_PATTERN =
   /honey|hp[-_]|leave[-_ ]?blank|do[-_ ]?not[-_ ]?fill|bot[-_ ]?(field|check)|_gotcha|nickname/i
 
 const EMAIL_PATTERN = /e-?mail|correo/i
-const PHONE_PATTERN = /phone|tel(?![a-z])|telefono|tel[eé]fono|celular|m[oó]vil|whatsapp/i
+const PHONE_PATTERN =
+  /phone|tel(?![a-z])|telefono|tel[eé]fono|celular|m[oó]vil|whatsapp/i
 const MESSAGE_PATTERN =
   /message|mensaje|comment|comentario|inquiry|consulta|details|detalles|descripci[oó]n|how can we help/i
-const COMPANY_PATTERN = /company|business|empresa|negocio|organiz|compa[nñ][ií]a/i
-const NAME_PATTERN = /\bname\b|nombre|apellido|fullname|firstname|lastname|fname|lname/i
+const COMPANY_PATTERN =
+  /company|business|empresa|negocio|organiz|compa[nñ][ií]a/i
+const NAME_PATTERN =
+  /\bname\b|nombre|apellido|fullname|firstname|lastname|fname|lname/i
 
 function haystack(f: FieldDescriptor): string {
   return [f.name, f.id, f.placeholder, f.ariaLabel, f.autocomplete]
     .filter(Boolean)
-    .join(' ')
+    .join(" ")
 }
 
 /**
@@ -77,19 +80,19 @@ function haystack(f: FieldDescriptor): string {
 export function classifyField(f: FieldDescriptor): FieldRole {
   const type = f.type?.toLowerCase()
 
-  if (f.tag === 'input' && type && NON_INPUT_TYPES.has(type)) return 'skip'
-  if (type === 'hidden' || !f.visible) return 'honeypot'
+  if (f.tag === "input" && type && NON_INPUT_TYPES.has(type)) return "skip"
+  if (type === "hidden" || !f.visible) return "honeypot"
 
   const text = haystack(f)
-  if (HONEYPOT_PATTERN.test(text)) return 'honeypot'
+  if (HONEYPOT_PATTERN.test(text)) return "honeypot"
 
-  if (type === 'email' || EMAIL_PATTERN.test(text)) return 'email'
-  if (type === 'tel' || PHONE_PATTERN.test(text)) return 'phone'
-  if (f.tag === 'textarea' || MESSAGE_PATTERN.test(text)) return 'message'
-  if (COMPANY_PATTERN.test(text)) return 'company'
-  if (NAME_PATTERN.test(text)) return 'name'
+  if (type === "email" || EMAIL_PATTERN.test(text)) return "email"
+  if (type === "tel" || PHONE_PATTERN.test(text)) return "phone"
+  if (f.tag === "textarea" || MESSAGE_PATTERN.test(text)) return "message"
+  if (COMPANY_PATTERN.test(text)) return "company"
+  if (NAME_PATTERN.test(text)) return "name"
 
-  return 'unknown'
+  return "unknown"
 }
 
 export type FillStep = { selector: string; role: FieldRole; value: string }
@@ -108,26 +111,26 @@ export function buildFillPlan(
 
   for (const field of fields) {
     const role = classifyField(field)
-    if (role === 'honeypot' || role === 'skip') continue
+    if (role === "honeypot" || role === "skip") continue
 
     let value: string
     switch (role) {
-      case 'name':
+      case "name":
         value = lead.name
         break
-      case 'email':
+      case "email":
         value = lead.email
         break
-      case 'phone':
+      case "phone":
         value = lead.phone
         break
-      case 'company':
+      case "company":
         value = lead.company
         break
-      case 'message':
+      case "message":
         value = lead.message
         break
-      case 'unknown':
+      case "unknown":
         if (!field.required) continue
         value = lead.token
         break
@@ -139,7 +142,7 @@ export function buildFillPlan(
 }
 
 export function countHoneypots(fields: FieldDescriptor[]): number {
-  return fields.filter((f) => classifyField(f) === 'honeypot').length
+  return fields.filter((f) => classifyField(f) === "honeypot").length
 }
 
 const CONFIRM_PATTERN =
@@ -179,14 +182,14 @@ export type VerdictInput = {
 }
 
 /** The state machine, kept pure so the interesting transitions are testable. */
-export function computeVerdict(o: VerdictInput): import('./types.js').Verdict {
-  if (!o.reachable) return 'blocked'
-  if (!o.formFound) return 'no-form'
-  if (!o.submitted) return 'filled'
-  if (o.delivered === true) return 'delivered'
-  if (o.delivered === false && o.confirmed) return 'silent-failure'
-  if (o.confirmed) return 'confirmed'
-  return 'submitted'
+export function computeVerdict(o: VerdictInput): import("./types.js").Verdict {
+  if (!o.reachable) return "blocked"
+  if (!o.formFound) return "no-form"
+  if (!o.submitted) return "filled"
+  if (o.delivered === true) return "delivered"
+  if (o.delivered === false && o.confirmed) return "silent-failure"
+  if (o.confirmed) return "confirmed"
+  return "submitted"
 }
 
 /**
@@ -194,19 +197,25 @@ export function computeVerdict(o: VerdictInput): import('./types.js').Verdict {
  * anything which does land in a real inbox is unmistakable to the human who
  * opens it.
  */
-export function makeSyntheticLead(siteName: string, now = new Date()): SyntheticLead {
-  const stamp = now.toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
-  const token = `SLPA-${siteName.toUpperCase().replace(/[^A-Z0-9]/g, '')}-${stamp}`
+export function makeSyntheticLead(
+  siteName: string,
+  now = new Date(),
+): SyntheticLead {
+  const stamp = now
+    .toISOString()
+    .replace(/[-:.TZ]/g, "")
+    .slice(0, 14)
+  const token = `SLPA-${siteName.toUpperCase().replace(/[^A-Z0-9]/g, "")}-${stamp}`
   return {
-    name: 'Lead Path Auditor (TEST)',
+    name: "Lead Path Auditor (TEST)",
     email: `audit+${token.toLowerCase()}@example.com`,
-    phone: '7875550100',
-    company: 'Automated lead-path test',
+    phone: "7875550100",
+    company: "Automated lead-path test",
     token,
     message: [
       `AUTOMATED TEST — PLEASE IGNORE / PRUEBA AUTOMATIZADA — FAVOR IGNORAR.`,
       `Reference: ${token}`,
       `This message verifies that this form still delivers. No reply needed.`,
-    ].join('\n'),
+    ].join("\n"),
   }
 }
