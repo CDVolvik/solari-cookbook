@@ -120,10 +120,14 @@ try {
     }
   }
 } finally {
-  // `kill()`, not `close()`, ends the VM — and without `solari.close()` the
-  // browser client's loopback proxy keeps the event loop alive forever.
-  await sandbox.kill()
-  await solari.close()
+  // `kill()`, not `close()`, ends the VM. Nested so a failing kill cannot skip
+  // the close: the browser client owns a listening loopback proxy, so missing
+  // `solari.close()` leaves the process alive forever instead of exiting.
+  try {
+    await sandbox.kill()
+  } finally {
+    await solari.close()
+  }
 }
 
 async function waitForServer(target: string) {
