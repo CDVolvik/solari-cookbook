@@ -120,8 +120,13 @@ try {
 } finally {
   // Required in Node: the client holds a loopback proxy open for the
   // connection-retry path, and that handle keeps the event loop alive.
-  await solari.close()
-  await fixture?.stop()
+  // Nested so a throw from either call still runs the other — otherwise the
+  // process hangs, or the fixture sandbox leaks until its idle timeout.
+  try {
+    await solari.close()
+  } finally {
+    await fixture?.stop()
+  }
 }
 
 // Keep report order stable regardless of which worker finished first.
